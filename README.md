@@ -14,178 +14,141 @@ _Create two deployment workflows using GitHub Actions and Microsoft Azure._
 </header>
 
 <!--
-  <<< Author notes: Step 2 >>>
+  <<< Author notes: Step 5 >>>
   Start this step by acknowledging the previous step.
   Define terms and link to docs.github.com.
 -->
 
-## Step 2: Set up an Azure environment
+## Step 5: Deploy to a production environment based on labels
 
-_Good job getting started :gear:_
+_Deployed! :ship:_
 
-### Nice work triggering a job on specific labels
+### Nicely done
 
-We won't be going into detail on the steps of this workflow, but it would be a good idea to become familiar with the actions we're using. They are:
+As we've done before, create a new branch called `production-deployment-workflow` from `main`. In the `.github/workflows` directory, add a new file titled `deploy-prod.yml`. This new workflow deals specifically with commits to `main` and handles deployments to `prod`.
 
-- [`actions/checkout`](https://github.com/actions/checkout)
-- [`actions/upload-artifact`](https://github.com/actions/upload-artifact)
-- [`actions/download-artifact`](https://github.com/actions/download-artifact)
-- [`docker/login-action`](https://github.com/docker/login-action)
-- [`docker/build-push-action`](https://github.com/docker/build-push-action)
-- [`azure/login`](https://github.com/Azure/login)
-- [`azure/webapps-deploy`](https://github.com/Azure/webapps-deploy)
+**Continuous delivery** (CD) is a concept that contains many behaviors and other, more specific concepts. One of those concepts is **test in production**. That can mean different things to different projects and different companies, and isn't a strict rule that says you are or aren't "doing CD".
 
-### :keyboard: Activity 1: Store your credentials in GitHub secrets and finish setting up your workflow
+In our case, we can match our production environment to be exactly like our staging environment. This minimizes opportunities for surprises once we deploy to production.
 
-1.  In a new tab, [create an Azure account](https://azure.microsoft.com/en-us/free/) if you don't already have one. If your Azure account is created through work, you may encounter issues accessing the necessary resources -- we recommend creating a new account for personal use and for this course.
-    > **Note**: You may need a credit card to create an Azure account. If you're a student, you may also be able to take advantage of the [Student Developer Pack](https://education.github.com/pack) for access to Azure. If you'd like to continue with the course without an Azure account, Skills will still respond, but none of the deployments will work.
-1.  Create a [new subscription](https://docs.microsoft.com/en-us/azure/cost-management-billing/manage/create-subscription) in the Azure Portal.
-    > **Note**: your subscription must be configured "Pay as you go" which will require you to enter billing information. This course will only use a few minutes from your free plan, but Azure requires the billing information.
-1.  Install [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest) on your machine.
-1.  In your terminal, run:
-    ```shell
-    az login
-    ```
-1.  Select the subscription you just selected from the interactive authentication prompt. Copy the value of the subscription ID to a safe place. We'll call this `AZURE_SUBSCRIPTION_ID`. Here's an example of what it looks like:
-    ```shell
-    No     Subscription name    Subscription ID                       Tenant
-    -----  -------------------  ------------------------------------  -----------------
-    [1] *  some-subscription    f****a09-****-4d1c-98**-f**********c  Default Directory
-    ```
-1.  In your terminal, run the command below.
+### :keyboard: Activity 1: Add triggers to production deployment workflow
 
-    ```shell
-    az ad sp create-for-rbac --name "GitHub-Actions" --role contributor \
-     --scopes /subscriptions/{subscription-id} \
-     --sdk-auth
+Copy and paste the following to your file, and replace any `<username>` placeholders with your GitHub username. Note that not much has changed from our staging workflow, except for our trigger, and that we won't be filtering by labels.
 
-        # Replace {subscription-id} with the same id stored in AZURE_SUBSCRIPTION_ID.
-    ```
+```yaml
+name: Deploy to production
 
-    > **Note**: The `\` character works as a line break on Unix based systems. If you are on a Windows based system the `\` character will cause this command to fail. Place this command on a single line if you are using Windows.
+on:
+  push:
+    branches:
+      - main
 
-1.  Copy the entire contents of the command's response, we'll call this `AZURE_CREDENTIALS`. Here's an example of what it looks like:
-    ```shell
-    {
-      "clientId": "<GUID>",
-      "clientSecret": "<GUID>",
-      "subscriptionId": "<GUID>",
-      "tenantId": "<GUID>",
-      (...)
-    }
-    ```
-1.  Back on GitHub, click on this repository's **Secrets and variables > Actions** in the Settings tab.
-1.  Click **New repository secret**
-1.  Name your new secret **AZURE_SUBSCRIPTION_ID** and paste the value from the `id:` field in the first command.
-1.  Click **Add secret**.
-1.  Click **New repository secret** again.
-1.  Name the second secret **AZURE_CREDENTIALS** and paste the entire contents from the second terminal command you entered.
-1.  Click **Add secret**
-1.  Go back to the Pull requests tab and in your pull request go to the **Files Changed** tab. Find and then edit the `.github/workflows/deploy-staging.yml` file to use some new actions. The full workflow file, should look like this:
-    ```yaml
-    name: Deploy to staging
+env:
+  IMAGE_REGISTRY_URL: ghcr.io
+  ###############################################
+  ### Replace <username> with GitHub username ###
+  ###############################################
+  DOCKER_IMAGE_NAME: <username>-azure-ttt
+  AZURE_WEBAPP_NAME: <username>-ttt-app
+  ###############################################
 
-    on:
-      pull_request:
-        types: [labeled]
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-    env:
-      IMAGE_REGISTRY_URL: ghcr.io
-      ###############################################
-      ### Replace <username> with GitHub username ###
-      ###############################################
-      DOCKER_IMAGE_NAME: <username>-azure-ttt
-      AZURE_WEBAPP_NAME: <username>-ttt-app
-      ###############################################
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 16
+      - name: npm install and build webpack
+        run: |
+          npm install
+          npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: webpack artifacts
+          path: public/
 
-    jobs:
-      build:
-        if: contains(github.event.pull_request.labels.*.name, 'stage')
+  Build-Docker-Image:
+    runs-on: ubuntu-latest
+    needs: build
+    name: Build image and store in GitHub Container Registry
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-        runs-on: ubuntu-latest
+      - name: Download built artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: webpack artifacts
+          path: public
 
-        steps:
-          - uses: actions/checkout@v4
-          - uses: actions/setup-node@v4
-            with:
-              node-version: 16
-          - name: npm install and build webpack
-            run: |
-              npm install
-              npm run build
-          - uses: actions/upload-artifact@v4
-            with:
-              name: webpack artifacts
-              path: public/
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.IMAGE_REGISTRY_URL }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.CR_PAT }}
 
-      Build-Docker-Image:
-        runs-on: ubuntu-latest
-        needs: build
-        name: Build image and store in GitHub Container Registry
-        steps:
-          - name: Checkout
-            uses: actions/checkout@v4
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{env.IMAGE_REGISTRY_URL}}/${{ github.repository }}/${{env.DOCKER_IMAGE_NAME}}
+          tags: |
+            type=sha,format=long,prefix=
 
-          - name: Download built artifact
-            uses: actions/download-artifact@v4
-            with:
-              name: webpack artifacts
-              path: public
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
-          - name: Log in to GHCR
-            uses: docker/login-action@v3
-            with:
-              registry: ${{ env.IMAGE_REGISTRY_URL }}
-              username: ${{ github.actor }}
-              password: ${{ secrets.CR_PAT }}
+  Deploy-to-Azure:
+    runs-on: ubuntu-latest
+    needs: Build-Docker-Image
+    name: Deploy app container to Azure
+    steps:
+      - name: "Login via Azure CLI"
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-          - name: Extract metadata (tags, labels) for Docker
-            id: meta
-            uses: docker/metadata-action@v5
-            with:
-              images: ${{env.IMAGE_REGISTRY_URL}}/${{ github.repository }}/${{env.DOCKER_IMAGE_NAME}}
-              tags: |
-                type=sha,format=long,prefix=
+      - uses: azure/docker-login@v1
+        with:
+          login-server: ${{env.IMAGE_REGISTRY_URL}}
+          username: ${{ github.actor }}
+          password: ${{ secrets.CR_PAT }}
 
-          - name: Build and push Docker image
-            uses: docker/build-push-action@v5
-            with:
-              context: .
-              push: true
-              tags: ${{ steps.meta.outputs.tags }}
-              labels: ${{ steps.meta.outputs.labels }}
+      - name: Deploy web app container
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{env.AZURE_WEBAPP_NAME}}
+          images: ${{env.IMAGE_REGISTRY_URL}}/${{ github.repository }}/${{env.DOCKER_IMAGE_NAME}}:${{github.sha}}
 
-      Deploy-to-Azure:
-        runs-on: ubuntu-latest
-        needs: Build-Docker-Image
-        name: Deploy app container to Azure
-        steps:
-          - name: "Login via Azure CLI"
-            uses: azure/login@v2
-            with:
-              creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Azure logout via Azure CLI
+        uses: azure/CLI@v2
+        with:
+          inlineScript: |
+            az logout
+            az cache purge
+            az account clear
+```
 
-          - uses: azure/docker-login@v1
-            with:
-              login-server: ${{env.IMAGE_REGISTRY_URL}}
-              username: ${{ github.actor }}
-              password: ${{ secrets.CR_PAT }}
+1. Update every `<username>` to your GitHub username.
+1. Commit your changes to the `production-deployment-workflow` branch.
+1. Go to the Pull requests tab and click **Compare & pull request** for the `production-deployment-workflow` branch and create a Pull request.
 
-          - name: Deploy web app container
-            uses: azure/webapps-deploy@v3
-            with:
-              app-name: ${{env.AZURE_WEBAPP_NAME}}
-              images: ${{env.IMAGE_REGISTRY_URL}}/${{ github.repository }}/${{env.DOCKER_IMAGE_NAME}}:${{ github.sha }}
+Great! The syntax you used tells GitHub Actions to only run that workflow when a commit is made to the main branch. Now we can put this workflow into action to deploy to production!
 
-          - name: Azure logout via Azure CLI
-            uses: azure/CLI@v2
-            with:
-              inlineScript: |
-                az logout
-                az cache purge
-                az account clear
-    ```
-1. After you've edited the file, click **Commit changes...** and commit to the `staging-workflow` branch.
+### :keyboard: Activity 2: Merge your pull request
+
+1. You can now [merge](https://docs.github.com/en/get-started/quickstart/github-glossary#merge) your pull request!
+1. Click **Merge pull request** and leave this tab open as we will be applying a label to the closed pull request in the next step.
+1. Now we just have to wait for the package to be published to GitHub Container Registry and the deployment to occur.
 1. Wait about 20 seconds then refresh this page (the one you're following instructions from). [GitHub Actions](https://docs.github.com/en/actions) will automatically update to the next step.
 
 <footer>

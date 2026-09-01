@@ -13,7 +13,7 @@ env:
   ###############################################
   ### Replace <username> with GitHub username ###
   ###############################################
-  AZURE_WEBAPP_NAME: msheedy-ud-ttt-app
+  AZURE_WEBAPP_NAME: actions-ttt-deployment
 
 jobs:
   setup-up-azure-resources:

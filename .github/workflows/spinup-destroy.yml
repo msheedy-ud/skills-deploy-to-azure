@@ -1,9 +1,11 @@
 name: Configure Azure environment
 
 on:
-  pull_request:
-    types: [main]
-
+  #pull_request:
+  #  types: [main]
+  push:
+    branches: [ main ]
+    
 env:
   IMAGE_REGISTRY_URL: ghcr.io
   AZURE_RESOURCE_GROUP: cd-with-actions
@@ -64,4 +66,6 @@ jobs:
       - name: Destroy Azure environment
         if: success()
         run: |
-          az group delete --name ${{env.AZURE_RESOURCE_GROUP}} --subscription ${{secrets.AZURE_SUBSCRIPTION_ID}} --yes
+          #az group delete --name ${{env.AZURE_RESOURCE_GROUP}} --subscription ${{secrets.AZURE_SUBSCRIPTION_ID}} --yes
+          echo "Bypassing Azure command because resource group is already manually deleted."
+          echo "Force returning success status."
